@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import os
+import socket
 import sys
 import threading
 import time
@@ -108,13 +110,81 @@ def _open_browser(url: str, delay: float = 1.0) -> None:
     threading.Thread(target=_open, daemon=True).start()
 
 
-def main() -> None:
-    port = int(os.environ.get("PORT", "8765"))
-    host = os.environ.get("HOST", "127.0.0.1")
-    url = f"http://{host if host != '0.0.0.0' else 'localhost'}:{port}"
-    logger.info("Osservaprezzi Carburanti in ascolto su %s", url)
-    if os.environ.get("CARBURANTI_OPEN_BROWSER", "1") == "1":
-        _open_browser(url)
+def _lan_addresses() -> list[str]:
+    """Restituisce gli IPv4 non-loopback raggiungibili sulla LAN."""
+    addrs: set[str] = set()
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, family=socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127."):
+                addrs.add(ip)
+    except socket.gaierror:
+        pass
+    # Fallback: connessione UDP fittizia per scoprire l'IP "di uscita".
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            addrs.add(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+    return sorted(addrs)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="carburanti",
+        description="Osservaprezzi Carburanti — server locale + UI web",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("HOST", "127.0.0.1"),
+        help="Indirizzo di bind (default: 127.0.0.1 — solo locale). Usa --lan per esporre sulla rete.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", "8765")),
+        help="Porta TCP (default: 8765)",
+    )
+    parser.add_argument(
+        "--lan",
+        action="store_true",
+        help="Scorciatoia: espone il server su 0.0.0.0 (raggiungibile da altri PC/telefoni in LAN).",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Non aprire automaticamente il browser all'avvio.",
+    )
+    args = parser.parse_args(argv)
+
+    host = "0.0.0.0" if args.lan else args.host
+    port = args.port
+
+    local_url = f"http://localhost:{port}"
+    open_url = local_url
+    logger.info("Osservaprezzi Carburanti in ascolto su %s", local_url)
+    if host == "0.0.0.0":
+        ips = _lan_addresses()
+        if ips:
+            for ip in ips:
+                logger.info("  LAN: http://%s:%d", ip, port)
+            open_url = f"http://{ips[0]}:{port}"
+        else:
+            logger.info("  LAN: http://<tuo-ip>:%d (impossibile rilevare l'IP)", port)
+        logger.info(
+            "NB: per accedere da un altro PC apri la porta %d sul firewall del sistema.",
+            port,
+        )
+
+    should_open = not args.no_browser and os.environ.get("CARBURANTI_OPEN_BROWSER", "1") == "1"
+    if should_open:
+        _open_browser(local_url if host != "0.0.0.0" else open_url)
+
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
