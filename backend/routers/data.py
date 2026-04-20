@@ -23,7 +23,7 @@ async def stats() -> dict:
 async def cheapest(
     fuel: str = Query(..., description="Nome carburante esatto, es. Benzina"),
     n: int = Query(20, ge=1, le=100),
-    mode: Optional[str] = Query(None, regex="^(self|served)?$"),
+    mode: Optional[str] = Query(None, pattern="^(self|served)?$"),
 ) -> dict:
     snap = await csv_fetcher.refresh()
     if not snap.stations:

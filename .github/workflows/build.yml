@@ -1,0 +1,125 @@
+name: Build binaries
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x86_64
+            asset: carburanti-linux-x86_64
+            binary: dist/carburanti
+          - os: macos-13
+            name: macos-x86_64
+            asset: carburanti-macos-x86_64
+            binary: dist/carburanti
+          - os: macos-14
+            name: macos-arm64
+            asset: carburanti-macos-arm64
+            binary: dist/carburanti
+          - os: windows-latest
+            name: windows-x86_64
+            asset: carburanti-windows-x86_64.exe
+            binary: dist/carburanti.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Build frontend (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync static assets (bash)
+        if: runner.os != 'Windows'
+        run: |
+          rm -rf backend/static
+          cp -r frontend/dist backend/static
+
+      - name: Sync static assets (powershell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path backend/static) { Remove-Item backend/static -Recurse -Force }
+          Copy-Item frontend/dist backend/static -Recurse
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build binary with PyInstaller
+        run: pyinstaller carburanti.spec --clean --noconfirm
+
+      - name: Rename artifact (bash)
+        if: runner.os != 'Windows'
+        run: mv ${{ matrix.binary }} dist/${{ matrix.asset }}
+
+      - name: Rename artifact (powershell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Rename-Item ${{ matrix.binary }} ${{ matrix.asset }}
+
+      - name: Smoke-test binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          PORT=8770 CARBURANTI_OPEN_BROWSER=0 "./dist/${{ matrix.asset }}" &
+          PID=$!
+          sleep 8
+          curl -sf -o /dev/null "http://127.0.0.1:8770/" || (kill $PID; exit 1)
+          curl -sf "http://127.0.0.1:8770/api/health" || (kill $PID; exit 1)
+          kill $PID || true
+
+      - name: Smoke-test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PORT = "8770"
+          $env:CARBURANTI_OPEN_BROWSER = "0"
+          $p = Start-Process -PassThru -FilePath "./dist/${{ matrix.asset }}"
+          Start-Sleep -Seconds 12
+          try {
+            Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8770/" | Out-Null
+            Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8770/api/health" | Out-Null
+          } finally {
+            Stop-Process -Id $p.Id -Force
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset }}

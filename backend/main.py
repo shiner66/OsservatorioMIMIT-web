@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/", include_in_schema=False)
+    @app.get("/", include_in_schema=False, response_model=None)
     async def root() -> FileResponse | JSONResponse:
         if index.exists():
             return FileResponse(index)
@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
             }
         )
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
     async def spa_fallback(full_path: str) -> FileResponse | JSONResponse:
         if full_path.startswith("api/"):
             return JSONResponse({"detail": "not found"}, status_code=404)

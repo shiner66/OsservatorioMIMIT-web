@@ -27,7 +27,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    [str(ROOT / "backend" / "main.py")],
+    [str(ROOT / "app.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
