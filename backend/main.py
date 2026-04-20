@@ -141,8 +141,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("HOST", "127.0.0.1"),
-        help="Indirizzo di bind (default: 127.0.0.1 — solo locale). Usa --lan per esporre sulla rete.",
+        default=os.environ.get("HOST"),
+        help="Indirizzo di bind esplicito (es. 192.168.1.10). Default: 0.0.0.0 (tutte le interfacce).",
     )
     parser.add_argument(
         "--port",
@@ -151,9 +151,14 @@ def main(argv: list[str] | None = None) -> None:
         help="Porta TCP (default: 8765)",
     )
     parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Bind solo su 127.0.0.1: il server sarà raggiungibile solo da questo PC.",
+    )
+    parser.add_argument(
         "--lan",
         action="store_true",
-        help="Scorciatoia: espone il server su 0.0.0.0 (raggiungibile da altri PC/telefoni in LAN).",
+        help="Deprecato: oggi è il default. Mantenuto per compatibilità.",
     )
     parser.add_argument(
         "--no-browser",
@@ -162,28 +167,31 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    host = "0.0.0.0" if args.lan else args.host
+    if args.local_only:
+        host = "127.0.0.1"
+    elif args.host:
+        host = args.host
+    else:
+        host = "0.0.0.0"
     port = args.port
 
     local_url = f"http://localhost:{port}"
-    open_url = local_url
     logger.info("Osservaprezzi Carburanti in ascolto su %s", local_url)
-    if host == "0.0.0.0":
+    if host != "127.0.0.1":
         ips = _lan_addresses()
         if ips:
             for ip in ips:
                 logger.info("  LAN: http://%s:%d", ip, port)
-            open_url = f"http://{ips[0]}:{port}"
         else:
             logger.info("  LAN: http://<tuo-ip>:%d (impossibile rilevare l'IP)", port)
         logger.info(
-            "NB: per accedere da un altro PC apri la porta %d sul firewall del sistema.",
+            "Se non riesci a connetterti da un altro dispositivo, controlla il firewall sulla porta %d.",
             port,
         )
 
     should_open = not args.no_browser and os.environ.get("CARBURANTI_OPEN_BROWSER", "1") == "1"
     if should_open:
-        _open_browser(local_url if host != "0.0.0.0" else open_url)
+        _open_browser(local_url)
 
     uvicorn.run(app, host=host, port=port, log_level="info")
 
