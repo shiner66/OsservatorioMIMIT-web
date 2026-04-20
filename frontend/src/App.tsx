@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Moon, RefreshCw, Sun } from "lucide-react";
 import { fetchStats, searchByPosition } from "./api";
@@ -9,7 +9,7 @@ import { FuelFilter } from "./components/FuelFilter";
 import { PriceStats } from "./components/PriceStats";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { usePreferences } from "./hooks/usePreferences";
-import type { Station } from "./types";
+import type { Station, UserPreferences } from "./types";
 
 const AUTO_REFRESH_MS = 60 * 60 * 1000;
 const DEFAULT_CENTER = { lat: 41.9028, lng: 12.4964 }; // Roma
@@ -32,6 +32,14 @@ export default function App() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [sheetOpen, setSheetOpen] = useState(false);
   const [countdown, setCountdown] = useState(AUTO_REFRESH_MS);
+
+  const handleFilterChange = useCallback(
+    (patch: { fuel?: UserPreferences["favoriteFuel"]; mode?: UserPreferences["mode"]; radius?: number }) => {
+      const { fuel, ...rest } = patch;
+      update({ ...rest, ...(fuel !== undefined ? { favoriteFuel: fuel } : {}) });
+    },
+    [update],
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -155,7 +163,7 @@ export default function App() {
               fuel={prefs.favoriteFuel}
               mode={prefs.mode}
               radius={prefs.radius}
-              onChange={update}
+              onChange={handleFilterChange}
             />
             {statsQuery.data && (
               <PriceStats
@@ -221,7 +229,7 @@ export default function App() {
               fuel={prefs.favoriteFuel}
               mode={prefs.mode}
               radius={prefs.radius}
-              onChange={update}
+              onChange={handleFilterChange}
             />
             {filteredStations.slice(0, 20).map((s) => (
               <StationCard
