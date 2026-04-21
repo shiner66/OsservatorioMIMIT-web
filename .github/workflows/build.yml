@@ -20,10 +20,6 @@ jobs:
             name: linux-x86_64
             asset: carburanti-linux-x86_64
             binary: dist/carburanti
-          - os: macos-13
-            name: macos-x86_64
-            asset: carburanti-macos-x86_64
-            binary: dist/carburanti
           - os: macos-14
             name: macos-arm64
             asset: carburanti-macos-arm64
