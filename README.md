@@ -191,6 +191,19 @@ Swagger UI su http://localhost:8765/docs quando il server è in esecuzione.
 
 ---
 
+## Rilascio (per i manutentori)
+
+Il workflow `Build binaries` crea binari multi-OS a ogni push e li carica come artifact delle run. Per pubblicare una **release** con i binari allegati basta fare un tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Il workflow si accorge del tag, ri-builda i tre binari (Linux/macOS-arm64/Windows) e li allega automaticamente alla release creata con note generate da GitHub. Lo stesso vale per l'immagine Docker: il tag `vX.Y.Z` pusha `ghcr.io/shiner66/osservatoriomimit-web:X.Y.Z` e `X.Y`.
+
+---
+
 ## Licenza e dati
 
 I dati provengono dal [portale MIMIT Osservaprezzi Carburanti](https://www.mimit.gov.it/it/) ed sono rilasciati in open-data. Questa UI è non-ufficiale e non affiliata al MIMIT.
