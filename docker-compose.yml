@@ -6,13 +6,8 @@ services:
     restart: unless-stopped
     ports:
       - "8765:8765"
-    volumes:
-      # Cache CSV MIMIT (persistente fra riavvii)
-      - osservaprezzi-cache:/data
-    environment:
-      # Override opzionali:
-      # - PORT=8765
-      # - CARBURANTI_CACHE=/data/cache
-
-volumes:
-  osservaprezzi-cache:
+    # Cache CSV MIMIT in RAM: ~30 MB, si rigenera dopo ogni riavvio.
+    tmpfs:
+      - /tmp/carburanti:size=128M,mode=1777
+    # environment:
+    #   - PORT=8765

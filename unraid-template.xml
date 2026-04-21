@@ -14,14 +14,13 @@
   <WebUI>http://[IP]:[PORT:8765]/</WebUI>
   <TemplateURL/>
   <Icon/>
-  <ExtraParams/>
+  <ExtraParams>--tmpfs /tmp/carburanti:size=128M,mode=1777</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Description>UI moderna per Osservaprezzi Carburanti. Espone una web UI (Leaflet + React) sulla porta 8765. Usa sia il CSV pubblico MIMIT (snapshot giornaliero delle 08:00) sia l'API in tempo reale ospzApi/search/zone per la ricerca entro 10 km.</Description>
+  <Description>UI moderna per Osservaprezzi Carburanti. Espone una web UI (Leaflet + React) sulla porta 8765. Usa sia il CSV pubblico MIMIT (snapshot giornaliero delle 08:00) sia l'API in tempo reale ospzApi/search/zone per la ricerca entro 10 km. La cache CSV vive in un tmpfs da 128 MB (RAM): niente path persistente da configurare, si ricostruisce al primo avvio.</Description>
   <Config Name="WebUI" Target="8765" Default="8765" Mode="tcp" Description="Porta HTTP della web UI" Type="Port" Display="always" Required="true" Mask="false">8765</Config>
-  <Config Name="Cache CSV" Target="/data" Default="/mnt/user/appdata/osservaprezzi" Mode="rw" Description="Cartella dove persistere la cache dei CSV MIMIT" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/osservaprezzi</Config>
   <Config Name="PORT" Target="PORT" Default="8765" Mode="" Description="Porta di bind interna (solitamente uguale alla porta esposta)" Type="Variable" Display="advanced" Required="false" Mask="false">8765</Config>
 </Container>

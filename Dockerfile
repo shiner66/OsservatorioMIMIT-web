@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
-    CARBURANTI_CACHE=/data/cache \
+    CARBURANTI_CACHE=/tmp/carburanti \
     CARBURANTI_OPEN_BROWSER=0 \
     PORT=8765
 
@@ -33,12 +33,11 @@ COPY backend ./backend
 COPY app.py ./
 COPY --from=frontend /frontend/dist ./backend/static
 
-# Utente non-root + volume per la cache CSV
+# Utente non-root. La cache CSV vive sotto /tmp (ephemera: un tmpfs dal
+# runtime la mette in RAM, altrimenti viene distrutta a fine container).
 RUN useradd --system --uid 1000 --home-dir /app carburanti \
- && mkdir -p /data/cache \
- && chown -R carburanti:carburanti /app /data
+ && chown -R carburanti:carburanti /app
 USER carburanti
-VOLUME ["/data"]
 
 EXPOSE 8765
 
