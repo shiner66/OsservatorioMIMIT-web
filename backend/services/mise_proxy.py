@@ -26,7 +26,7 @@ FUEL_ID_MAP: dict[int, str] = {
 }
 
 MISE_TTL_SECONDS = 5 * 60
-TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 USER_AGENT = "OsservaprezziWeb/1.0"
 
 

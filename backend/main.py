@@ -55,6 +55,12 @@ def create_app() -> FastAPI:
     app.include_router(search.router)
     app.include_router(geo.router)
 
+    @app.on_event("startup")
+    async def _warmup_csv() -> None:
+        # Scarica i CSV MIMIT in background: la prima ricerca non deve
+        # bloccarsi su download di ~60 MB.
+        csv_fetcher.schedule_refresh()
+
     @app.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         snap = csv_fetcher.get_snapshot()

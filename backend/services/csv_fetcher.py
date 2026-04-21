@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import logging
@@ -9,7 +10,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
 from typing import Optional
 
 import httpx
@@ -66,11 +66,12 @@ class CsvSnapshot:
     last_update: Optional[datetime] = None
 
 
-_state = {
+_state: dict = {
     "snapshot": CsvSnapshot(),
     "fetched_at": 0.0,
+    "refresh_task": None,
 }
-_lock = Lock()
+_lock = asyncio.Lock()
 
 
 def _to_float(value: object) -> Optional[float]:
@@ -207,7 +208,8 @@ async def refresh(force: bool = False) -> CsvSnapshot:
     if not force and (now - _state["fetched_at"]) < CSV_TTL_SECONDS and _state["snapshot"].stations:
         return _state["snapshot"]
 
-    with _lock:
+    async with _lock:
+        now = time.time()
         if not force and (now - _state["fetched_at"]) < CSV_TTL_SECONDS and _state["snapshot"].stations:
             return _state["snapshot"]
 
@@ -216,6 +218,8 @@ async def refresh(force: bool = False) -> CsvSnapshot:
             prz_bytes = await _fetch_to_disk(PREZZI_URL, "prezzi.csv")
         except Exception as exc:
             logger.error("refresh CSV fallito: %s", exc)
+            # Evita retry a raffica: segna il tentativo anche se fallito
+            _state["fetched_at"] = now
             return _state["snapshot"]
 
         stations = _parse_anagrafica(ana_bytes)
@@ -230,6 +234,25 @@ async def refresh(force: bool = False) -> CsvSnapshot:
             latest.isoformat() if latest else "n/d",
         )
         return snap
+
+
+def schedule_refresh(force: bool = False) -> None:
+    """Avvia refresh() in background senza bloccare il chiamante.
+
+    Se c'è già un task attivo non ne crea un altro (niente dog-pile).
+    """
+    task = _state.get("refresh_task")
+    if task is not None and not task.done():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _state["refresh_task"] = loop.create_task(refresh(force=force))
+
+
+def is_stale() -> bool:
+    return (time.time() - _state["fetched_at"]) >= CSV_TTL_SECONDS
 
 
 def get_snapshot() -> CsvSnapshot:

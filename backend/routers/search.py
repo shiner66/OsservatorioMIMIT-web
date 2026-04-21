@@ -82,8 +82,10 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
         logger.warning("MISE API non disponibile: %s", exc)
         mise_failed = True
 
-    # Refresh anagrafica CSV sempre (è cached 1h): serve per enrichment indirizzo
-    snap = await csv_fetcher.refresh()
+    # Usa la snapshot CSV corrente (non bloccante); se stale, avvia refresh in background.
+    snap = csv_fetcher.get_snapshot()
+    if not snap.stations or csv_fetcher.is_stale():
+        csv_fetcher.schedule_refresh()
     mise_results = _enrich_from_csv(mise_results, snap)
 
     need_csv = req.radius > MISE_EFFECTIVE_RADIUS_M or mise_failed or not mise_results
