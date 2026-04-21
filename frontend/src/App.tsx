@@ -176,9 +176,13 @@ export default function App() {
   }, [locate]);
 
   const geoBlocked = !isSecureContext;
+  const hasPickedPosition =
+    !!prefs.lastPosition ||
+    center.lat !== DEFAULT_CENTER.lat ||
+    center.lng !== DEFAULT_CENTER.lng;
   const headerWarning = geoError
     ? geoError
-    : geoBlocked
+    : geoBlocked && !hasPickedPosition
       ? "Su HTTP la geolocalizzazione è bloccata dal browser. Usa la ricerca per città o tocca «Segnala posizione» e poi tocca la mappa."
       : null;
 
