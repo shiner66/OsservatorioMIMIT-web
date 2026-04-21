@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import httpx
 from fastapi import APIRouter
@@ -12,7 +13,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
-MISE_EFFECTIVE_RADIUS_M = 5000  # MISE cappa lato server intorno ai 5 km
+# Ufficialmente il sito MIMIT permette "per zona" fino a 10 km.
+# Override per sperimentare raggi maggiori: CARBURANTI_MISE_MAX_RADIUS_M.
+try:
+    MISE_EFFECTIVE_RADIUS_M = int(os.environ.get("CARBURANTI_MISE_MAX_RADIUS_M", "10000"))
+except ValueError:
+    MISE_EFFECTIVE_RADIUS_M = 10000
 
 
 def _enrich_from_csv(results: list[dict], snap) -> list[dict]:
@@ -70,16 +76,21 @@ def _merge_results(mise: list[dict], csv_rows: list[dict], radius_m: int) -> lis
 async def search_position(req: PositionSearchRequest) -> SearchResponse:
     mise_results: list[dict] = []
     mise_failed = False
+    mise_radius = min(req.radius, MISE_EFFECTIVE_RADIUS_M)
     try:
         mise_results = await mise_proxy.search_zone(
             lat=req.lat,
             lon=req.lon,
-            radius_m=min(req.radius, MISE_EFFECTIVE_RADIUS_M),
+            radius_m=mise_radius,
             fuel=req.fuel,
             order=req.order,
         )
+        logger.info(
+            "MISE zone lat=%.4f lon=%.4f radius=%dm -> %d impianti",
+            req.lat, req.lon, mise_radius, len(mise_results),
+        )
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("MISE API non disponibile: %s", exc)
+        logger.warning("MISE API non disponibile (radius=%dm): %s", mise_radius, exc)
         mise_failed = True
 
     # Usa la snapshot CSV corrente (non bloccante); se stale, avvia refresh in background.
@@ -110,10 +121,11 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
         )
     if not merged:
         return SearchResponse(results=[], source="mise_api", degraded=mise_failed)
-    # Se stiamo mescolando MISE + CSV oltre i 5 km, segnalalo
+    # Se stiamo mescolando MISE + CSV oltre il cap MIMIT, segnalalo
     degraded = req.radius > MISE_EFFECTIVE_RADIUS_M and bool(csv_rows)
+    cap_km = MISE_EFFECTIVE_RADIUS_M // 1000
     msg = (
-        "Oltre i 5 km i prezzi provengono dal CSV giornaliero (non in tempo reale)."
+        f"Oltre i {cap_km} km i prezzi provengono dal CSV giornaliero (non in tempo reale)."
         if degraded
         else None
     )
