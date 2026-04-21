@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -13,6 +14,16 @@ from typing import Optional
 
 import httpx
 import pandas as pd
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
 
 logger = logging.getLogger(__name__)
 
@@ -288,11 +299,11 @@ def cheapest(snap: CsvSnapshot, fuel: str, n: int = 20, is_self: Optional[bool] 
 
 
 def stations_near(snap: CsvSnapshot, lat: float, lng: float, radius_m: int) -> list[dict]:
-    """Fallback geografico usando il CSV quando l'API MISE non risponde."""
+    """Fallback geografico usando il CSV. Ritorna stazioni con distanza in km."""
     if not snap.stations:
         return []
-    # approssimazione: 1° lat ~= 111 km; ignoriamo correzione cos(lat) per semplicità
-    deg = radius_m / 111_000.0
+    radius_km = radius_m / 1000.0
+    deg = radius_km / 111.0  # bbox prefilter per velocità
     prices_by_id: dict[int, list[PriceRecord]] = {}
     for p in snap.prices:
         prices_by_id.setdefault(p.id, []).append(p)
@@ -300,12 +311,20 @@ def stations_near(snap: CsvSnapshot, lat: float, lng: float, radius_m: int) -> l
     for st in snap.stations.values():
         if abs(st.lat - lat) > deg or abs(st.lng - lng) > deg:
             continue
+        dist = _haversine_km(lat, lng, st.lat, st.lng)
+        if dist > radius_km:
+            continue
         fuels = [
             {"name": p.fuel, "isSelf": p.isSelf, "price": p.price}
             for p in prices_by_id.get(st.id, [])
         ]
         if not fuels:
             continue
+        # insertDate: usa il dtComu più recente tra i prezzi (ISO string)
+        latest = None
+        for p in prices_by_id.get(st.id, []):
+            if p.dtComu and (latest is None or p.dtComu > latest):
+                latest = p.dtComu
         out.append(
             {
                 "id": st.id,
@@ -316,7 +335,10 @@ def stations_near(snap: CsvSnapshot, lat: float, lng: float, radius_m: int) -> l
                 "province": st.provincia,
                 "lat": st.lat,
                 "lng": st.lng,
+                "distance": round(dist, 2),
+                "insertDate": latest,
                 "fuels": fuels,
             }
         )
+    out.sort(key=lambda s: s["distance"])
     return out

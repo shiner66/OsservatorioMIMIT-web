@@ -7,6 +7,7 @@ const DEFAULTS: UserPreferences = {
   favoriteFuel: "Benzina",
   mode: "all",
   radius: 5000,
+  favorites: [],
 };
 
 export function usePreferences() {
@@ -32,5 +33,14 @@ export function usePreferences() {
     setPrefs((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  return { prefs, update };
+  const toggleFavorite = useCallback((id: number) => {
+    setPrefs((prev) => {
+      const set = new Set(prev.favorites);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return { ...prev, favorites: Array.from(set) };
+    });
+  }, []);
+
+  return { prefs, update, toggleFavorite };
 }

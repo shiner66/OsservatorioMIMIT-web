@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Moon, RefreshCw, Sun } from "lucide-react";
+import { AlertTriangle, ChevronUp, Crosshair, Moon, RefreshCw, Star, Sun } from "lucide-react";
 import { fetchStats, searchByPosition } from "./api";
 import { StationsMap } from "./components/Map";
 import { StationCard } from "./components/StationCard";
@@ -14,6 +14,10 @@ import type { Station, UserPreferences } from "./types";
 const AUTO_REFRESH_MS = 60 * 60 * 1000;
 const DEFAULT_CENTER = { lat: 41.9028, lng: 12.4964 }; // Roma
 
+const isSecureContext =
+  typeof window !== "undefined" &&
+  (window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname));
+
 function formatFreshness(iso?: string | null) {
   if (!iso) return { label: "—", tone: "bg-slate-400" };
   const now = Date.now();
@@ -25,12 +29,13 @@ function formatFreshness(iso?: string | null) {
 }
 
 export default function App() {
-  const { prefs, update } = usePreferences();
+  const { prefs, update, toggleFavorite } = usePreferences();
   const { position, locate, loading: locating, error: geoError, setPosition } = useGeolocation();
   const [center, setCenter] = useState(prefs.lastPosition ?? DEFAULT_CENTER);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [pickMode, setPickMode] = useState(false);
   const [countdown, setCountdown] = useState(AUTO_REFRESH_MS);
 
   const handleFilterChange = useCallback(
@@ -80,8 +85,10 @@ export default function App() {
   }, [searchQuery.dataUpdatedAt]);
 
   const stations: Station[] = searchQuery.data?.results ?? [];
+  const favoritesSet = useMemo(() => new Set(prefs.favorites), [prefs.favorites]);
 
   const filteredStations = useMemo(() => {
+    const radiusKm = prefs.radius / 1000;
     return stations
       .map((s) => ({
         ...s,
@@ -93,12 +100,22 @@ export default function App() {
         }),
       }))
       .filter((s) => s.fuels.length > 0)
+      .filter((s) => s.distance == null || s.distance <= radiusKm)
       .sort((a, b) => {
         const pa = a.fuels[0]?.price ?? Infinity;
         const pb = b.fuels[0]?.price ?? Infinity;
         return pa - pb;
       });
-  }, [stations, prefs.favoriteFuel, prefs.mode]);
+  }, [stations, prefs.favoriteFuel, prefs.mode, prefs.radius]);
+
+  const favoriteStations = useMemo(
+    () => filteredStations.filter((s) => favoritesSet.has(s.id)),
+    [filteredStations, favoritesSet],
+  );
+  const otherStations = useMemo(
+    () => filteredStations.filter((s) => !favoritesSet.has(s.id)),
+    [filteredStations, favoritesSet],
+  );
 
   const avgPrice = useMemo(() => {
     const stat = statsQuery.data?.stats.find(
@@ -107,27 +124,63 @@ export default function App() {
     return stat?.avgSelf ?? stat?.avgServed ?? null;
   }, [statsQuery.data, prefs.favoriteFuel]);
 
-  const fresh = formatFreshness(searchQuery.data?.source === "mise_api" ? new Date().toISOString() : statsQuery.data?.csvLastUpdate);
+  const localAvg = useMemo(() => {
+    if (filteredStations.length === 0) return null;
+    const prices = filteredStations
+      .map((s) => s.fuels[0]?.price)
+      .filter((p): p is number => typeof p === "number");
+    if (!prices.length) return null;
+    return prices.reduce((a, b) => a + b, 0) / prices.length;
+  }, [filteredStations]);
+
+  const fresh = formatFreshness(
+    searchQuery.data?.source === "mise_api" ? new Date().toISOString() : statsQuery.data?.csvLastUpdate,
+  );
   const degradedMsg = searchQuery.data?.degraded ? searchQuery.data.message : null;
   const selectedStation = filteredStations.find((s) => s.id === selectedId) ?? null;
 
+  const handleMapPick = useCallback(
+    (lat: number, lng: number) => {
+      setCenter({ lat, lng });
+      setPosition(null);
+      setPickMode(false);
+    },
+    [setPosition],
+  );
+
+  const handleLocate = useCallback(() => {
+    if (!isSecureContext) {
+      // Non possiamo ottenere la geolocalizzazione su HTTP: attiva pick-on-map.
+      setPickMode(true);
+      return;
+    }
+    locate();
+  }, [locate]);
+
+  const geoBlocked = !isSecureContext;
+  const headerWarning = geoError
+    ? geoError
+    : geoBlocked
+      ? "Su HTTP la geolocalizzazione è bloccata dal browser. Usa la ricerca per città o tocca «Segnala posizione» e poi tocca la mappa."
+      : null;
+
   return (
     <div className="h-screen flex flex-col">
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm z-10">
+      <header className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm z-20">
         <h1 className="text-base sm:text-lg font-bold text-brand-700 dark:text-brand-500 shrink-0">
           Osservaprezzi
         </h1>
-        <div className="flex-1 max-w-xl">
+        <div className="flex-1 min-w-0 max-w-xl">
           <SearchBar
             onPick={(lat, lng) => {
               setCenter({ lat, lng });
               setPosition(null);
             }}
-            onLocate={locate}
+            onLocate={handleLocate}
             locating={locating}
           />
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-500">
             <span className={`w-2 h-2 rounded-full ${fresh.tone}`} />
             {fresh.label}
@@ -149,10 +202,18 @@ export default function App() {
         </div>
       </header>
 
-      {(degradedMsg || geoError) && (
-        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{geoError || degradedMsg}</span>
+      {(degradedMsg || headerWarning) && (
+        <div className="px-3 sm:px-4 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span className="flex-1">{headerWarning || degradedMsg}</span>
+          {geoBlocked && (
+            <button
+              onClick={() => setPickMode((p) => !p)}
+              className="shrink-0 px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 font-medium"
+            >
+              {pickMode ? "Annulla" : "Segnala posizione"}
+            </button>
+          )}
         </div>
       )}
 
@@ -169,21 +230,42 @@ export default function App() {
               <PriceStats
                 stats={statsQuery.data.stats}
                 highlightFuel={prefs.favoriteFuel}
-                currentPrice={filteredStations[0]?.fuels[0]?.price ?? null}
+                currentPrice={localAvg ?? filteredStations[0]?.fuels[0]?.price ?? null}
               />
             )}
           </div>
           <div className="p-3 space-y-2">
+            {favoriteStations.length > 0 && (
+              <>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 uppercase tracking-wide">
+                  <Star className="w-3 h-3" fill="currentColor" /> Preferiti
+                </div>
+                {favoriteStations.map((s) => (
+                  <StationCard
+                    key={`fav-${s.id}`}
+                    station={s}
+                    highlightFuel={prefs.favoriteFuel}
+                    mode={prefs.mode}
+                    onSelect={() => setSelectedId(s.id)}
+                    selected={selectedId === s.id}
+                    priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
+                    favorite
+                    onToggleFavorite={toggleFavorite}
+                  />
+                ))}
+                <div className="border-t border-slate-200 dark:border-slate-700 my-2" />
+              </>
+            )}
             <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>{filteredStations.length} impianti</span>
+              <span>{otherStations.length} impianti nel raggio di {(prefs.radius / 1000).toFixed(1)} km</span>
               {searchQuery.isFetching && <span>Caricamento…</span>}
             </div>
-            {filteredStations.length === 0 && !searchQuery.isFetching && (
+            {otherStations.length === 0 && !searchQuery.isFetching && (
               <div className="text-sm text-slate-500 text-center py-8">
                 Nessun impianto trovato. Prova ad aumentare il raggio o cambiare carburante.
               </div>
             )}
-            {filteredStations.map((s) => (
+            {otherStations.map((s) => (
               <StationCard
                 key={s.id}
                 station={s}
@@ -192,6 +274,8 @@ export default function App() {
                 onSelect={() => setSelectedId(s.id)}
                 selected={selectedId === s.id}
                 priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
+                favorite={favoritesSet.has(s.id)}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </div>
@@ -205,33 +289,93 @@ export default function App() {
             avgPrice={avgPrice}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onPickCenter={pickMode ? handleMapPick : undefined}
+            favorites={favoritesSet}
           />
+          {pickMode && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-medium shadow-lg pointer-events-none">
+              Tocca la mappa per impostare la posizione
+            </div>
+          )}
+          <button
+            onClick={() => setPickMode((p) => !p)}
+            className={`md:hidden absolute right-3 top-3 z-[400] p-2.5 rounded-full shadow-lg ${
+              pickMode ? "bg-brand-600 text-white" : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+            }`}
+            title="Imposta posizione manualmente"
+          >
+            <Crosshair className="w-5 h-5" />
+          </button>
         </main>
 
         {/* Mobile bottom sheet */}
         <div
-          className={`md:hidden absolute inset-x-0 bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 rounded-t-2xl shadow-xl bottom-sheet ${
-            sheetOpen ? "translate-y-0" : "translate-y-[calc(100%-96px)]"
-          }`}
-          style={{ maxHeight: "75vh" }}
+          className="md:hidden absolute inset-x-0 bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 rounded-t-2xl shadow-xl bottom-sheet z-30"
+          style={{
+            transform: sheetOpen
+              ? "translateY(0)"
+              : "translateY(calc(100% - 148px - env(safe-area-inset-bottom)))",
+            maxHeight: "85vh",
+            paddingBottom: "env(safe-area-inset-bottom)",
+          }}
         >
           <button
             onClick={() => setSheetOpen((o) => !o)}
-            className="w-full flex flex-col items-center py-2"
+            className="w-full flex flex-col items-center pt-3 pb-2 active:bg-slate-100 dark:active:bg-slate-700 rounded-t-2xl"
+            aria-label={sheetOpen ? "Chiudi pannello" : "Apri pannello"}
           >
-            <span className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <span className="mt-1 text-sm font-medium">
+            <span className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+            <div className="mt-2 flex items-center gap-2 text-sm font-semibold">
+              <ChevronUp
+                className={`w-4 h-4 transition-transform ${sheetOpen ? "rotate-180" : ""}`}
+              />
               {filteredStations.length} impianti — {prefs.favoriteFuel}
-            </span>
+            </div>
+            {localAvg != null && (
+              <div className="text-xs text-slate-500 mt-0.5">
+                media in zona € {localAvg.toFixed(3)}
+                {avgPrice != null && (
+                  <span className={localAvg <= avgPrice ? " text-emerald-600" : " text-rose-600"}>
+                    {" "}
+                    ({localAvg <= avgPrice ? "−" : "+"}
+                    {Math.abs(localAvg - avgPrice).toFixed(3)} vs nazionale)
+                  </span>
+                )}
+              </div>
+            )}
           </button>
-          <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: "60vh" }}>
+          <div
+            className="px-3 pt-1 pb-4 space-y-3 overflow-y-auto overscroll-contain"
+            style={{ maxHeight: "calc(85vh - 110px)" }}
+          >
             <FuelFilter
               fuel={prefs.favoriteFuel}
               mode={prefs.mode}
               radius={prefs.radius}
               onChange={handleFilterChange}
             />
-            {filteredStations.slice(0, 20).map((s) => (
+            {favoriteStations.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 uppercase tracking-wide">
+                  <Star className="w-3 h-3" fill="currentColor" /> Preferiti
+                </div>
+                {favoriteStations.map((s) => (
+                  <StationCard
+                    key={`mfav-${s.id}`}
+                    station={s}
+                    highlightFuel={prefs.favoriteFuel}
+                    mode={prefs.mode}
+                    onSelect={() => setSelectedId(s.id)}
+                    selected={selectedId === s.id}
+                    priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
+                    favorite
+                    onToggleFavorite={toggleFavorite}
+                  />
+                ))}
+                <div className="border-t border-slate-200 dark:border-slate-700" />
+              </div>
+            )}
+            {otherStations.slice(0, 40).map((s) => (
               <StationCard
                 key={s.id}
                 station={s}
@@ -240,6 +384,8 @@ export default function App() {
                 onSelect={() => setSelectedId(s.id)}
                 selected={selectedId === s.id}
                 priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
+                favorite={favoritesSet.has(s.id)}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </div>
@@ -254,6 +400,8 @@ export default function App() {
             mode={prefs.mode}
             selected
             priceBadge={priceBadge(selectedStation.fuels[0]?.price ?? null, avgPrice)}
+            favorite={favoritesSet.has(selectedStation.id)}
+            onToggleFavorite={toggleFavorite}
           />
         </div>
       )}

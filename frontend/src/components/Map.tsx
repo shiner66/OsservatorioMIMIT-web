@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { Station } from "../types";
 
 // Fix Leaflet default marker icons for Vite bundling.
@@ -38,6 +38,16 @@ function Recenter({ lat, lng, zoom }: { lat: number; lng: number; zoom?: number 
   return null;
 }
 
+function LongPressToSetCenter({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    contextmenu(e) {
+      // desktop: click destro
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
 interface Props {
   center: { lat: number; lng: number };
   stations: Station[];
@@ -45,9 +55,20 @@ interface Props {
   avgPrice: number | null;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onPickCenter?: (lat: number, lng: number) => void;
+  favorites?: Set<number>;
 }
 
-export function StationsMap({ center, stations, highlightFuel, avgPrice, selectedId, onSelect }: Props) {
+export function StationsMap({
+  center,
+  stations,
+  highlightFuel,
+  avgPrice,
+  selectedId,
+  onSelect,
+  onPickCenter,
+  favorites,
+}: Props) {
   return (
     <MapContainer center={[center.lat, center.lng]} zoom={13} scrollWheelZoom className="h-full w-full">
       <TileLayer
@@ -55,22 +76,24 @@ export function StationsMap({ center, stations, highlightFuel, avgPrice, selecte
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <Recenter lat={center.lat} lng={center.lng} />
+      {onPickCenter && <LongPressToSetCenter onPick={onPickCenter} />}
       <Marker position={[center.lat, center.lng]} icon={coloredIcon("#2563eb")}>
         <Popup>La tua posizione</Popup>
       </Marker>
       {stations.map((s) => {
         const price = s.fuels.find((f) => f.name === highlightFuel)?.price ?? null;
         const color = colorForPrice(price, avgPrice);
+        const isFav = favorites?.has(s.id);
         return (
           <Marker
             key={s.id}
             position={[s.lat, s.lng]}
-            icon={coloredIcon(color)}
+            icon={coloredIcon(isFav ? "#f59e0b" : color)}
             eventHandlers={{ click: () => onSelect(s.id) }}
           >
             <Popup>
               <div className="text-sm">
-                <div className="font-semibold">{s.name || s.brand || "Impianto"}</div>
+                <div className="font-semibold">{s.brand || s.name || "Impianto"}</div>
                 {s.address && <div className="text-xs text-slate-500">{s.address}</div>}
                 {price != null && (
                   <div className="mt-1 font-mono">

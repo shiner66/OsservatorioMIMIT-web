@@ -67,12 +67,17 @@ export function FuelFilter({ fuel, mode, radius, onChange }: Props) {
         <input
           type="range"
           min={500}
-          max={15000}
+          max={30000}
           step={500}
           value={radius}
           onChange={(e) => onChange({ radius: Number(e.target.value) })}
           className="w-full mt-2 accent-brand-600"
         />
+        <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+          <span>0.5 km</span>
+          <span>15 km</span>
+          <span>30 km</span>
+        </div>
       </div>
     </div>
   );

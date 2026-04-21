@@ -56,4 +56,5 @@ export interface UserPreferences {
   mode: FuelMode;
   radius: number;
   lastPosition?: { lat: number; lng: number };
+  favorites: number[];
 }

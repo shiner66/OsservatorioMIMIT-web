@@ -65,17 +65,27 @@ def _normalize_results(raw: dict[str, Any], fuel_filter: Optional[str] = None) -
             )
         if fuel_filter and not fuels:
             continue
+        raw_dist = item.get("distance")
+        try:
+            dist = float(raw_dist) if raw_dist is not None else None
+        except (TypeError, ValueError):
+            dist = None
         out.append(
             {
                 "id": item.get("id"),
-                "brand": item.get("brand"),
-                "name": item.get("name") or item.get("brand"),
-                "address": item.get("address"),
-                "municipality": item.get("municipality") or item.get("city"),
-                "province": item.get("province"),
+                "brand": item.get("brand") or item.get("bandiera"),
+                "name": item.get("name") or item.get("nome") or item.get("brand"),
+                "address": item.get("address") or item.get("indirizzo"),
+                "municipality": (
+                    item.get("municipality")
+                    or item.get("comune")
+                    or item.get("city")
+                    or item.get("town")
+                ),
+                "province": item.get("province") or item.get("provincia"),
                 "lat": lat,
                 "lng": lng,
-                "distance": item.get("distance"),
+                "distance": dist,
                 "insertDate": item.get("insertDate"),
                 "fuels": fuels,
             }

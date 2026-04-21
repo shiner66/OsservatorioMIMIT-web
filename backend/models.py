@@ -11,7 +11,7 @@ FuelName = Literal["Benzina", "Gasolio", "GPL", "Metano", "HVO", "Gasolio Riscal
 class PositionSearchRequest(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
-    radius: int = Field(5000, ge=500, le=20000, description="Raggio in metri")
+    radius: int = Field(5000, ge=500, le=30000, description="Raggio in metri")
     fuel: Optional[str] = None
     order: Literal["asc", "desc"] = "asc"
 
