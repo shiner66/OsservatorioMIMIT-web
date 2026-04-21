@@ -6,6 +6,7 @@ import { StationsMap } from "./components/Map";
 import { StationCard } from "./components/StationCard";
 import { SearchBar } from "./components/SearchBar";
 import { FuelFilter } from "./components/FuelFilter";
+import { AdvancedSettings } from "./components/AdvancedSettings";
 import { PriceStats } from "./components/PriceStats";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { usePreferences } from "./hooks/usePreferences";
@@ -271,6 +272,7 @@ export default function App() {
                 currentPrice={localAvg ?? filteredStations[0]?.fuels[0]?.price ?? null}
               />
             )}
+            <AdvancedSettings />
           </div>
           <div className="p-3 space-y-2">
             {favoriteStations.length > 0 && (
@@ -396,6 +398,7 @@ export default function App() {
               radius={prefs.radius}
               onChange={handleFilterChange}
             />
+            <AdvancedSettings />
             {favoriteStations.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 uppercase tracking-wide">
