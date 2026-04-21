@@ -1,0 +1,33 @@
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+.venv
+venv
+env
+
+# Node / build artifacts
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+backend/static
+
+# PyInstaller
+build
+dist
+*.spec.bak
+
+# Git / IDE / editor
+.git
+.github
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Cache locali
+.carburanti-cache
+.cache
+
+# Docs / CI che non servono nell'immagine
+README*.md
+LICENSE*

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 import httpx
 from fastapi import APIRouter
@@ -13,27 +12,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
-# Ufficialmente il sito MIMIT permette "per zona" fino a 10 km.
-# Override iniziale: CARBURANTI_MISE_MAX_RADIUS_M. A runtime modificabile via /api/settings.
-MISE_RADIUS_DEFAULT_M = 10000
-MISE_RADIUS_HARD_CAP_M = 50000  # limite massimo sperimentabile via UI
-
-try:
-    _initial = int(os.environ.get("CARBURANTI_MISE_MAX_RADIUS_M", str(MISE_RADIUS_DEFAULT_M)))
-except ValueError:
-    _initial = MISE_RADIUS_DEFAULT_M
-
-_settings = {"mise_max_radius_m": max(500, min(_initial, MISE_RADIUS_HARD_CAP_M))}
-
-
-def get_mise_max_radius_m() -> int:
-    return _settings["mise_max_radius_m"]
-
-
-def set_mise_max_radius_m(value: int) -> int:
-    clamped = max(500, min(int(value), MISE_RADIUS_HARD_CAP_M))
-    _settings["mise_max_radius_m"] = clamped
-    return clamped
+# Il sito MIMIT ufficiale cappa la ricerca per zona a 10 km; valori superiori
+# vengono ignorati dal server remoto (verificato empiricamente).
+MISE_EFFECTIVE_RADIUS_M = 10000
 
 
 def _enrich_from_csv(results: list[dict], snap) -> list[dict]:
@@ -91,8 +72,7 @@ def _merge_results(mise: list[dict], csv_rows: list[dict], radius_m: int) -> lis
 async def search_position(req: PositionSearchRequest) -> SearchResponse:
     mise_results: list[dict] = []
     mise_failed = False
-    max_mise = get_mise_max_radius_m()
-    mise_radius = min(req.radius, max_mise)
+    mise_radius = min(req.radius, MISE_EFFECTIVE_RADIUS_M)
     try:
         mise_results = await mise_proxy.search_zone(
             lat=req.lat,
@@ -115,7 +95,7 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
         csv_fetcher.schedule_refresh()
     mise_results = _enrich_from_csv(mise_results, snap)
 
-    need_csv = req.radius > max_mise or mise_failed or not mise_results
+    need_csv = req.radius > MISE_EFFECTIVE_RADIUS_M or mise_failed or not mise_results
     csv_rows: list[dict] = []
     if need_csv:
         csv_rows = csv_fetcher.stations_near(snap, req.lat, req.lon, req.radius)
@@ -137,11 +117,10 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
         )
     if not merged:
         return SearchResponse(results=[], source="mise_api", degraded=mise_failed)
-    # Se stiamo mescolando MISE + CSV oltre il cap MIMIT, segnalalo
-    degraded = req.radius > max_mise and bool(csv_rows)
-    cap_km = max_mise // 1000
+    # Oltre i 10 km i prezzi vengono dal CSV giornaliero (MIMIT cappa qui)
+    degraded = req.radius > MISE_EFFECTIVE_RADIUS_M and bool(csv_rows)
     msg = (
-        f"Oltre i {cap_km} km i prezzi provengono dal CSV giornaliero (non in tempo reale)."
+        "Oltre i 10 km i prezzi provengono dal CSV giornaliero (non in tempo reale)."
         if degraded
         else None
     )

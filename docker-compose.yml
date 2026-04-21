@@ -1,0 +1,18 @@
+services:
+  osservaprezzi:
+    build: .
+    image: osservaprezzi-carburanti:latest
+    container_name: osservaprezzi-carburanti
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Cache CSV MIMIT (persistente fra riavvii)
+      - osservaprezzi-cache:/data
+    environment:
+      # Override opzionali:
+      # - PORT=8765
+      # - CARBURANTI_CACHE=/data/cache
+
+volumes:
+  osservaprezzi-cache:

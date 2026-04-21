@@ -49,20 +49,3 @@ export interface HealthResponse {
 export function health(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
 }
-
-export interface AdvancedSettings {
-  miseMaxRadiusM: number;
-  miseMaxRadiusDefaultM: number;
-  miseHardCapM: number;
-}
-
-export function getAdvancedSettings(): Promise<AdvancedSettings> {
-  return request<AdvancedSettings>("/api/settings");
-}
-
-export function updateAdvancedSettings(miseMaxRadiusM: number): Promise<AdvancedSettings> {
-  return request<AdvancedSettings>("/api/settings", {
-    method: "POST",
-    body: JSON.stringify({ miseMaxRadiusM }),
-  });
-}

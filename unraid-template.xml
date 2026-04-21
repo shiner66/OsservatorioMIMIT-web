@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Osservaprezzi</Name>
+  <Repository>ghcr.io/shiner66/osservaprezzi-carburanti:latest</Repository>
+  <Registry>https://ghcr.io/shiner66/osservaprezzi-carburanti</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/shiner66/OsservatorioMIMIT-web</Project>
+  <Overview>Osservaprezzi Carburanti — UI moderna e responsive sui dati del MIMIT (ex MISE), con mappa, ricerca per raggio, preferiti, snapshot CSV giornaliero e API in tempo reale.</Overview>
+  <Category>Tools: Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:8765]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>UI moderna per Osservaprezzi Carburanti. Espone una web UI (Leaflet + React) sulla porta 8765. Usa sia il CSV pubblico MIMIT (snapshot giornaliero delle 08:00) sia l'API in tempo reale ospzApi/search/zone per la ricerca entro 10 km.</Description>
+  <Config Name="WebUI" Target="8765" Default="8765" Mode="tcp" Description="Porta HTTP della web UI" Type="Port" Display="always" Required="true" Mask="false">8765</Config>
+  <Config Name="Cache CSV" Target="/data" Default="/mnt/user/appdata/osservaprezzi" Mode="rw" Description="Cartella dove persistere la cache dei CSV MIMIT" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/osservaprezzi</Config>
+  <Config Name="PORT" Target="PORT" Default="8765" Mode="" Description="Porta di bind interna (solitamente uguale alla porta esposta)" Type="Variable" Display="advanced" Required="false" Mask="false">8765</Config>
+</Container>

@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import HealthResponse
-from .routers import data, geo, search, settings as settings_router
+from .routers import data, geo, search
 from .services import csv_fetcher
 
 logging.basicConfig(
@@ -54,7 +54,6 @@ def create_app() -> FastAPI:
     app.include_router(data.router)
     app.include_router(search.router)
     app.include_router(geo.router)
-    app.include_router(settings_router.router)
 
     @app.on_event("startup")
     async def _warmup_csv() -> None:
