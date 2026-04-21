@@ -191,16 +191,45 @@ Swagger UI su http://localhost:8765/docs quando il server è in esecuzione.
 
 ---
 
-## Rilascio (per i manutentori)
+## Rilascio automatico (per i manutentori)
 
-Il workflow `Build binaries` crea binari multi-OS a ogni push e li carica come artifact delle run. Per pubblicare una **release** con i binari allegati basta fare un tag:
+Il repo usa [**release-please**](https://github.com/googleapis/release-please) con **Conventional Commits**: il versioning è totalmente automatico.
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
+### Come funziona
+
+1. Pusha commit su `main` usando i prefissi convenzionali:
+   - `feat: …` → bump **minor** (o patch finché la versione < 1.0.0)
+   - `fix: …` → bump **patch**
+   - `feat!:` oppure `BREAKING CHANGE:` nel body → bump **major**
+   - `docs:`, `ci:`, `refactor:`, `ux:`, `perf:` → compaiono nel changelog ma non bumpano
+   - `chore:`, `test:`, `style:` → nascosti dal changelog
+2. Release-please apre (e aggiorna a ogni push successivo) una PR **"chore: release vX.Y.Z"** con il `CHANGELOG.md` popolato automaticamente.
+3. Al merge della PR:
+   - crea il tag `vX.Y.Z` e la GitHub Release con le note
+   - il tag fa partire `build.yml` (binari Linux/macOS-arm64/Windows allegati) e `docker.yml` (immagine `ghcr.io/shiner66/osservatoriomimit-web:X.Y.Z`, `X.Y`, `latest`)
+
+Zero interventi manuali: basta mergiare la release PR.
+
+### File rilevanti
+
+- `release-please-config.json` — sezioni del changelog in italiano
+- `.release-please-manifest.json` — versione corrente tracciata
+- `version.txt` — single source of truth della versione
+- `.github/workflows/release-please.yml` — il workflow
+
+### Forzare un bump major
+
+Se un commit introduce breaking change, usa:
+
+```
+feat!: nuovo schema API incompatibile
+
+BREAKING CHANGE: /api/search ora richiede X invece di Y
 ```
 
-Il workflow si accorge del tag, ri-builda i tre binari (Linux/macOS-arm64/Windows) e li allega automaticamente alla release creata con note generate da GitHub. Lo stesso vale per l'immagine Docker: il tag `vX.Y.Z` pusha `ghcr.io/shiner66/osservatoriomimit-web:X.Y.Z` e `X.Y`.
+### Prima release
+
+La prima volta che si merge un commit `feat:`/`fix:` dopo questo setup, release-please aprirà una PR che porta da `0.1.0` alla prima versione calcolata (tipicamente `0.2.0`). Per saltare a `1.0.0` appena tutto è stabile, basta aggiungere un commit con `feat!:` o modificare manualmente `.release-please-manifest.json` in quella PR.
 
 ---
 
