@@ -69,3 +69,5 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     csvLastUpdate: Optional[str] = None
     stationsLoaded: int = 0
+    csvStatus: Literal["idle", "downloading", "parsing", "ready", "failed"] = "idle"
+    csvMessage: Optional[str] = None

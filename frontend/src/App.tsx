@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronUp, Crosshair, Moon, RefreshCw, Star, Sun } from "lucide-react";
-import { fetchStats, searchByPosition } from "./api";
+import { AlertTriangle, ChevronUp, Crosshair, Loader2, Moon, RefreshCw, Star, Sun } from "lucide-react";
+import { fetchStats, health, searchByPosition } from "./api";
 import { StationsMap } from "./components/Map";
 import { StationCard } from "./components/StationCard";
 import { SearchBar } from "./components/SearchBar";
@@ -61,6 +61,16 @@ export default function App() {
     queryKey: ["stats"],
     queryFn: fetchStats,
     staleTime: 10 * 60 * 1000,
+  });
+
+  const healthQuery = useQuery({
+    queryKey: ["health"],
+    queryFn: health,
+    // Finché il CSV sta caricando/parsando, poll rapido; poi rallenta.
+    refetchInterval: (q) => {
+      const s = q.state.data?.csvStatus;
+      return s === "downloading" || s === "parsing" ? 2000 : 30_000;
+    },
   });
 
   const searchQuery = useQuery({
@@ -137,6 +147,14 @@ export default function App() {
     searchQuery.data?.source === "mise_api" ? new Date().toISOString() : statsQuery.data?.csvLastUpdate,
   );
   const degradedMsg = searchQuery.data?.degraded ? searchQuery.data.message : null;
+  const csvStatus = healthQuery.data?.csvStatus;
+  const csvBusy = csvStatus === "downloading" || csvStatus === "parsing";
+  const searching = searchQuery.isFetching;
+  const activityLabel = csvBusy
+    ? healthQuery.data?.csvMessage ?? "Scarico dati MIMIT…"
+    : searching
+      ? "Cerco impianti…"
+      : null;
   const selectedStation = filteredStations.find((s) => s.id === selectedId) ?? null;
 
   const handleMapPick = useCallback(
@@ -181,10 +199,20 @@ export default function App() {
           />
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-500">
-            <span className={`w-2 h-2 rounded-full ${fresh.tone}`} />
-            {fresh.label}
-          </span>
+          {activityLabel ? (
+            <span
+              className="hidden sm:flex items-center gap-1.5 text-xs text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-700/20 px-2 py-1 rounded-full"
+              title={activityLabel}
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="max-w-[160px] truncate">{activityLabel}</span>
+            </span>
+          ) : (
+            <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-500">
+              <span className={`w-2 h-2 rounded-full ${fresh.tone}`} />
+              {fresh.label}
+            </span>
+          )}
           <button
             onClick={() => searchQuery.refetch()}
             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -202,6 +230,12 @@ export default function App() {
         </div>
       </header>
 
+      {csvBusy && (
+        <div className="sm:hidden px-3 py-1.5 bg-brand-50 dark:bg-brand-700/20 border-b border-brand-200 dark:border-brand-700 text-xs text-brand-800 dark:text-brand-200 flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+          <span className="truncate">{healthQuery.data?.csvMessage ?? "Scarico dati MIMIT…"}</span>
+        </div>
+      )}
       {(degradedMsg || headerWarning) && (
         <div className="px-3 sm:px-4 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -258,7 +292,11 @@ export default function App() {
             )}
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>{otherStations.length} impianti nel raggio di {(prefs.radius / 1000).toFixed(1)} km</span>
-              {searchQuery.isFetching && <span>Caricamento…</span>}
+              {activityLabel && (
+                <span className="flex items-center gap-1 text-brand-700 dark:text-brand-400">
+                  <Loader2 className="w-3 h-3 animate-spin" /> {activityLabel}
+                </span>
+              )}
             </div>
             {otherStations.length === 0 && !searchQuery.isFetching && (
               <div className="text-sm text-slate-500 text-center py-8">

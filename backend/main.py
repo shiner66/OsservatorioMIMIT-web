@@ -64,10 +64,13 @@ def create_app() -> FastAPI:
     @app.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         snap = csv_fetcher.get_snapshot()
+        st = csv_fetcher.get_status()
         return HealthResponse(
             status="ok",
             csvLastUpdate=snap.last_update.isoformat() if snap.last_update else None,
             stationsLoaded=len(snap.stations),
+            csvStatus=st["status"],
+            csvMessage=st["message"],
         )
 
     static_dir = _static_dir()

@@ -70,8 +70,20 @@ _state: dict = {
     "snapshot": CsvSnapshot(),
     "fetched_at": 0.0,
     "refresh_task": None,
+    # Stato per la UI: idle | downloading | parsing | ready | failed
+    "status": "idle",
+    "status_message": None,
 }
 _lock = asyncio.Lock()
+
+
+def _set_status(status: str, message: Optional[str] = None) -> None:
+    _state["status"] = status
+    _state["status_message"] = message
+
+
+def get_status() -> dict:
+    return {"status": _state["status"], "message": _state["status_message"]}
 
 
 def _to_float(value: object) -> Optional[float]:
@@ -214,14 +226,17 @@ async def refresh(force: bool = False) -> CsvSnapshot:
             return _state["snapshot"]
 
         try:
+            _set_status("downloading", "Scarico anagrafica impianti (MIMIT)…")
             ana_bytes = await _fetch_to_disk(ANAGRAFICA_URL, "anagrafica.csv")
+            _set_status("downloading", "Scarico listino prezzi (MIMIT)…")
             prz_bytes = await _fetch_to_disk(PREZZI_URL, "prezzi.csv")
         except Exception as exc:
             logger.error("refresh CSV fallito: %s", exc)
-            # Evita retry a raffica: segna il tentativo anche se fallito
             _state["fetched_at"] = now
+            _set_status("failed", f"Download CSV fallito: {exc}")
             return _state["snapshot"]
 
+        _set_status("parsing", "Elaboro dati CSV…")
         stations = _parse_anagrafica(ana_bytes)
         prices, latest = _parse_prezzi(prz_bytes)
         snap = CsvSnapshot(stations=stations, prices=prices, last_update=latest)
@@ -233,6 +248,7 @@ async def refresh(force: bool = False) -> CsvSnapshot:
             len(prices),
             latest.isoformat() if latest else "n/d",
         )
+        _set_status("ready", None)
         return snap
 
 

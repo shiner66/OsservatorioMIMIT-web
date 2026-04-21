@@ -38,6 +38,14 @@ export function reverseGeocode(lat: number, lon: number): Promise<{ display_name
   return request(`/api/geo/reverse?lat=${lat}&lon=${lon}`);
 }
 
-export function health(): Promise<{ csvLastUpdate: string | null; stationsLoaded: number }> {
-  return request("/api/health");
+export interface HealthResponse {
+  status: string;
+  csvLastUpdate: string | null;
+  stationsLoaded: number;
+  csvStatus: "idle" | "downloading" | "parsing" | "ready" | "failed";
+  csvMessage: string | null;
+}
+
+export function health(): Promise<HealthResponse> {
+  return request<HealthResponse>("/api/health");
 }
