@@ -65,6 +65,15 @@ class CsvSnapshot:
     prices: list[PriceRecord] = field(default_factory=list)
     last_update: Optional[datetime] = None
 
+    def build_prices_by_id(self) -> dict[int, list[PriceRecord]]:
+        """Costruisce (e cachea) l'indice id→prezzi, evitando di ricalcolarlo ad ogni query."""
+        if not hasattr(self, "_prices_by_id"):
+            index: dict[int, list[PriceRecord]] = {}
+            for p in self.prices:
+                index.setdefault(p.id, []).append(p)
+            object.__setattr__(self, "_prices_by_id", index)
+        return self._prices_by_id  # type: ignore[attr-defined]
+
 
 _state: dict = {
     "snapshot": CsvSnapshot(),
@@ -78,6 +87,7 @@ _lock = asyncio.Lock()
 
 
 def _set_status(status: str, message: Optional[str] = None) -> None:
+    """Aggiorna lo stato visibile dalla UI. Deve essere chiamato dentro il lock."""
     _state["status"] = status
     _state["status_message"] = message
 
@@ -263,6 +273,10 @@ def schedule_refresh(force: bool = False) -> None:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
+        logger.warning(
+            "schedule_refresh() chiamato senza un event loop in esecuzione: "
+            "il warmup CSV verrà saltato."
+        )
         return
     _state["refresh_task"] = loop.create_task(refresh(force=force))
 
@@ -275,7 +289,16 @@ def get_snapshot() -> CsvSnapshot:
     return _state["snapshot"]
 
 
+# Cache per compute_stats: (id_snapshot, risultato) — evita ricalcoli ad ogni request.
+_stats_cache: tuple[int, list[dict]] | None = None
+
+
 def compute_stats(snap: CsvSnapshot) -> list[dict]:
+    global _stats_cache
+    snap_id = id(snap)
+    if _stats_cache is not None and _stats_cache[0] == snap_id:
+        return _stats_cache[1]
+
     if not snap.prices:
         return []
     df = pd.DataFrame(
@@ -297,6 +320,7 @@ def compute_stats(snap: CsvSnapshot) -> list[dict]:
             }
         )
     rows.sort(key=lambda r: r["fuel"])
+    _stats_cache = (snap_id, rows)
     return rows
 
 
@@ -343,9 +367,7 @@ def stations_near(snap: CsvSnapshot, lat: float, lng: float, radius_m: int) -> l
         return []
     radius_km = radius_m / 1000.0
     deg = radius_km / 111.0  # bbox prefilter per velocità
-    prices_by_id: dict[int, list[PriceRecord]] = {}
-    for p in snap.prices:
-        prices_by_id.setdefault(p.id, []).append(p)
+    prices_by_id = snap.build_prices_by_id()  # indice pre-calcolato
     out: list[dict] = []
     for st in snap.stations.values():
         if abs(st.lat - lat) > deg or abs(st.lng - lng) > deg:

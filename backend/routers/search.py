@@ -3,13 +3,34 @@ from __future__ import annotations
 import logging
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 from ..models import LocalitaSearchRequest, PositionSearchRequest, SearchResponse
 from ..services import csv_fetcher, mise_proxy
+from ..services.cache import TTLCache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["search"])
+
+# Rate limiter semplice in-process: max N richieste per IP per finestra.
+# Non sostituisce un vero WAF ma protegge da flood accidentali su LAN.
+_RATE_LIMIT_REQUESTS = 30   # richieste
+_RATE_LIMIT_WINDOW_S = 60   # per finestra (secondi)
+_rate_cache: TTLCache = TTLCache(max_size=4096)
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Lancia HTTPException 429 se il client supera il rate limit."""
+    ip = request.client.host if request.client else "unknown"
+    key = f"rl:{ip}"
+    count: int = _rate_cache.get(key) or 0
+    if count >= _RATE_LIMIT_REQUESTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Troppe richieste. Riprova tra qualche secondo.",
+            headers={"Retry-After": str(_RATE_LIMIT_WINDOW_S)},
+        )
+    _rate_cache.set(key, count + 1, _RATE_LIMIT_WINDOW_S)
 
 
 # Il sito MIMIT ufficiale cappa la ricerca per zona a 10 km; valori superiori
@@ -69,7 +90,8 @@ def _merge_results(mise: list[dict], csv_rows: list[dict], radius_m: int) -> lis
 
 
 @router.post("/position", response_model=SearchResponse)
-async def search_position(req: PositionSearchRequest) -> SearchResponse:
+async def search_position(req: PositionSearchRequest, request: Request) -> SearchResponse:
+    _check_rate_limit(request)
     mise_results: list[dict] = []
     mise_failed = False
     mise_radius = min(req.radius, MISE_EFFECTIVE_RADIUS_M)
@@ -114,9 +136,10 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
             source="csv_fallback",
             degraded=True,
             message="API in tempo reale non disponibile: prezzi dal CSV (aggiornato alle 08:00).",
+            effectiveRadius=mise_radius,
         )
     if not merged:
-        return SearchResponse(results=[], source="mise_api", degraded=mise_failed)
+        return SearchResponse(results=[], source="mise_api", degraded=mise_failed, effectiveRadius=mise_radius)
     # Oltre i 10 km i prezzi vengono dal CSV giornaliero (MIMIT cappa qui)
     degraded = req.radius > MISE_EFFECTIVE_RADIUS_M and bool(csv_rows)
     msg = (
@@ -124,11 +147,12 @@ async def search_position(req: PositionSearchRequest) -> SearchResponse:
         if degraded
         else None
     )
-    return SearchResponse(results=merged, source="mise_api", degraded=degraded, message=msg)
+    return SearchResponse(results=merged, source="mise_api", degraded=degraded, message=msg, effectiveRadius=mise_radius)
 
 
 @router.post("/localita", response_model=SearchResponse)
-async def search_localita(req: LocalitaSearchRequest) -> SearchResponse:
+async def search_localita(req: LocalitaSearchRequest, request: Request) -> SearchResponse:
+    _check_rate_limit(request)
     try:
         results = await mise_proxy.search_area(
             region=req.region,

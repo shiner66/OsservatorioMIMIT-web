@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -38,28 +39,31 @@ def _static_dir() -> Path:
     return fallback
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Scarica i CSV MIMIT in background: la prima ricerca non deve
+    # bloccarsi su download di ~60 MB.
+    csv_fetcher.schedule_refresh()
+    yield
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Osservaprezzi Carburanti",
         description="UI moderna sui dati MIMIT + API Osservaprezzi",
         version="1.0.0",
+        lifespan=_lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
     )
 
     app.include_router(data.router)
     app.include_router(search.router)
     app.include_router(geo.router)
-
-    @app.on_event("startup")
-    async def _warmup_csv() -> None:
-        # Scarica i CSV MIMIT in background: la prima ricerca non deve
-        # bloccarsi su download di ~60 MB.
-        csv_fetcher.schedule_refresh()
 
     @app.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

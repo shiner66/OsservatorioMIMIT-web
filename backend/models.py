@@ -11,7 +11,16 @@ FuelName = Literal["Benzina", "Gasolio", "GPL", "Metano", "HVO", "Gasolio Riscal
 class PositionSearchRequest(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
-    radius: int = Field(5000, ge=500, le=30000, description="Raggio in metri")
+    radius: int = Field(
+        5000,
+        ge=500,
+        le=30000,
+        description=(
+            "Raggio in metri. L'API MIMIT in tempo reale copre al massimo 10 km "
+            "(MISE_EFFECTIVE_RADIUS_M); oltre tale soglia i prezzi provengono dal "
+            "CSV giornaliero e la risposta avrà degraded=True."
+        ),
+    )
     fuel: Optional[str] = None
     order: Literal["asc", "desc"] = "asc"
 
@@ -50,6 +59,13 @@ class SearchResponse(BaseModel):
     source: Literal["mise_api", "csv_fallback"] = "mise_api"
     degraded: bool = False
     message: Optional[str] = None
+    effectiveRadius: Optional[int] = Field(
+        None,
+        description=(
+            "Raggio effettivo usato per la ricerca MIMIT (in metri). "
+            "Può essere inferiore al raggio richiesto per via del cap a 10 km dell'API."
+        ),
+    )
 
 
 class FuelStat(BaseModel):

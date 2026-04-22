@@ -37,6 +37,8 @@ export default function App() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pickMode, setPickMode] = useState(false);
   const [countdown, setCountdown] = useState(AUTO_REFRESH_MS);
+  const [showAllMobile, setShowAllMobile] = useState(false);
+  const MOBILE_LIMIT = 40;
 
   const handleFilterChange = useCallback(
     (patch: { fuel?: UserPreferences["favoriteFuel"]; mode?: UserPreferences["mode"]; radius?: number }) => {
@@ -117,6 +119,12 @@ export default function App() {
         return pa - pb;
       });
   }, [stations, prefs.favoriteFuel, prefs.mode, prefs.radius]);
+
+  // Resetta la lista mobile quando i filtri cambiano (l'utente si aspetta
+  // di ricominciare dalla cima della lista con il nuovo risultato).
+  useEffect(() => {
+    setShowAllMobile(false);
+  }, [prefs.favoriteFuel, prefs.mode, prefs.radius]);
 
   const favoriteStations = useMemo(
     () => filteredStations.filter((s) => favoritesSet.has(s.id)),
@@ -220,13 +228,19 @@ export default function App() {
           <button
             onClick={() => searchQuery.refetch()}
             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
-            title={`Aggiorna (auto fra ${Math.floor(countdown / 60000)}m)`}
+            aria-label="Aggiorna dati"
+            title={`Aggiorna (auto fra ${
+              countdown >= 60000
+                ? `${Math.floor(countdown / 60000)}m`
+                : `${Math.floor(countdown / 1000)}s`
+            })`}
           >
             <RefreshCw className={`w-4 h-4 ${searchQuery.isFetching ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={() => setDark((d) => !d)}
             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+            aria-label={dark ? "Passa al tema chiaro" : "Passa al tema scuro"}
             title="Tema"
           >
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -283,7 +297,6 @@ export default function App() {
                     key={`fav-${s.id}`}
                     station={s}
                     highlightFuel={prefs.favoriteFuel}
-                    mode={prefs.mode}
                     onSelect={() => setSelectedId(s.id)}
                     selected={selectedId === s.id}
                     priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
@@ -312,7 +325,6 @@ export default function App() {
                 key={s.id}
                 station={s}
                 highlightFuel={prefs.favoriteFuel}
-                mode={prefs.mode}
                 onSelect={() => setSelectedId(s.id)}
                 selected={selectedId === s.id}
                 priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
@@ -406,7 +418,6 @@ export default function App() {
                     key={`mfav-${s.id}`}
                     station={s}
                     highlightFuel={prefs.favoriteFuel}
-                    mode={prefs.mode}
                     onSelect={() => setSelectedId(s.id)}
                     selected={selectedId === s.id}
                     priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
@@ -417,12 +428,11 @@ export default function App() {
                 <div className="border-t border-slate-200 dark:border-slate-700" />
               </div>
             )}
-            {otherStations.slice(0, 40).map((s) => (
+            {(showAllMobile ? otherStations : otherStations.slice(0, MOBILE_LIMIT)).map((s) => (
               <StationCard
                 key={s.id}
                 station={s}
                 highlightFuel={prefs.favoriteFuel}
-                mode={prefs.mode}
                 onSelect={() => setSelectedId(s.id)}
                 selected={selectedId === s.id}
                 priceBadge={priceBadge(s.fuels[0]?.price ?? null, avgPrice)}
@@ -430,6 +440,14 @@ export default function App() {
                 onToggleFavorite={toggleFavorite}
               />
             ))}
+            {!showAllMobile && otherStations.length > MOBILE_LIMIT && (
+              <button
+                onClick={() => setShowAllMobile(true)}
+                className="w-full py-2 text-sm text-brand-600 dark:text-brand-400 font-medium hover:underline"
+              >
+                Mostra altri {otherStations.length - MOBILE_LIMIT} impianti
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -439,7 +457,6 @@ export default function App() {
           <StationCard
             station={selectedStation}
             highlightFuel={prefs.favoriteFuel}
-            mode={prefs.mode}
             selected
             priceBadge={priceBadge(selectedStation.fuels[0]?.price ?? null, avgPrice)}
             favorite={favoritesSet.has(selectedStation.id)}

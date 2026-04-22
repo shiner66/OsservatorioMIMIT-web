@@ -7,7 +7,15 @@ from typing import Any, Optional
 
 
 class TTLCache:
-    """Thread-safe in-memory cache with per-entry TTL and LRU eviction."""
+    """Thread-safe in-memory cache with per-entry TTL and LRU eviction.
+
+    Utilizza ``threading.Lock`` (e non ``asyncio.Lock``) perché tutte le
+    operazioni pubbliche (get/set/clear) sono O(1) e non cedono mai il
+    controllo all'event loop: non c'è rischio di deadlock né di blocco
+    dell'event loop per più di qualche microsecondo.
+    Se in futuro venissero aggiunte operazioni I/O o costose all'interno
+    del lock, occorrerà migrare a ``asyncio.Lock``.
+    """
 
     def __init__(self, max_size: int = 512) -> None:
         self._data: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()

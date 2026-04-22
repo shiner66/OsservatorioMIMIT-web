@@ -1,4 +1,4 @@
-import type { NominatimResult, SearchResponse, StatsResponse } from "./types";
+import type { HealthResponse, NominatimResult, SearchResponse, StatsResponse } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(path, {
@@ -36,14 +36,6 @@ export function geocode(query: string): Promise<NominatimResult[]> {
 
 export function reverseGeocode(lat: number, lon: number): Promise<{ display_name?: string }> {
   return request(`/api/geo/reverse?lat=${lat}&lon=${lon}`);
-}
-
-export interface HealthResponse {
-  status: string;
-  csvLastUpdate: string | null;
-  stationsLoaded: number;
-  csvStatus: "idle" | "downloading" | "parsing" | "ready" | "failed";
-  csvMessage: string | null;
 }
 
 export function health(): Promise<HealthResponse> {

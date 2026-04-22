@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { Station } from "../types";
@@ -69,6 +69,19 @@ export function StationsMap({
   onPickCenter,
   favorites,
 }: Props) {
+  // Pre-calcola icone e prezzi una sola volta per render — evita di ricreare
+  // istanze L.divIcon (costose) ad ogni aggiornamento del componente padre.
+  const markerData = useMemo(
+    () =>
+      stations.map((s) => {
+        const price = s.fuels.find((f) => f.name === highlightFuel)?.price ?? null;
+        const isFav = favorites?.has(s.id) ?? false;
+        const color = isFav ? "#f59e0b" : colorForPrice(price, avgPrice);
+        return { station: s, price, icon: coloredIcon(color) };
+      }),
+    [stations, highlightFuel, avgPrice, favorites],
+  );
+
   return (
     <MapContainer center={[center.lat, center.lng]} zoom={13} scrollWheelZoom className="h-full w-full">
       <TileLayer
@@ -80,32 +93,27 @@ export function StationsMap({
       <Marker position={[center.lat, center.lng]} icon={coloredIcon("#2563eb")}>
         <Popup>La tua posizione</Popup>
       </Marker>
-      {stations.map((s) => {
-        const price = s.fuels.find((f) => f.name === highlightFuel)?.price ?? null;
-        const color = colorForPrice(price, avgPrice);
-        const isFav = favorites?.has(s.id);
-        return (
-          <Marker
-            key={s.id}
-            position={[s.lat, s.lng]}
-            icon={coloredIcon(isFav ? "#f59e0b" : color)}
-            eventHandlers={{ click: () => onSelect(s.id) }}
-          >
-            <Popup>
-              <div className="text-sm">
-                <div className="font-semibold">{s.brand || s.name || "Impianto"}</div>
-                {s.address && <div className="text-xs text-slate-500">{s.address}</div>}
-                {price != null && (
-                  <div className="mt-1 font-mono">
-                    {highlightFuel}: € {price.toFixed(3)}
-                  </div>
-                )}
-                {selectedId === s.id && <div className="mt-1 text-brand-600 text-xs">Selezionato</div>}
-              </div>
-            </Popup>
-          </Marker>
-        );
-      })}
+      {markerData.map(({ station: s, price, icon }) => (
+        <Marker
+          key={s.id}
+          position={[s.lat, s.lng]}
+          icon={icon}
+          eventHandlers={{ click: () => onSelect(s.id) }}
+        >
+          <Popup>
+            <div className="text-sm">
+              <div className="font-semibold">{s.brand || s.name || "Impianto"}</div>
+              {s.address && <div className="text-xs text-slate-500">{s.address}</div>}
+              {price != null && (
+                <div className="mt-1 font-mono">
+                  {highlightFuel}: € {price.toFixed(3)}
+                </div>
+              )}
+              {selectedId === s.id && <div className="mt-1 text-brand-600 text-xs">Selezionato</div>}
+            </div>
+          </Popup>
+        </Marker>
+      ))}
     </MapContainer>
   );
 }

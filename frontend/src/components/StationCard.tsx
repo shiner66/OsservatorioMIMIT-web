@@ -1,10 +1,9 @@
 import { Clock, ExternalLink, Fuel, MapPin, Star } from "lucide-react";
-import type { FuelMode, Station } from "../types";
+import type { Station } from "../types";
 
 interface Props {
   station: Station;
   highlightFuel: string;
-  mode: FuelMode;
   onSelect?: () => void;
   selected?: boolean;
   priceBadge?: "cheap" | "mid" | "expensive" | null;
@@ -59,7 +58,6 @@ function formatDate(iso?: string | null) {
 export function StationCard({
   station,
   highlightFuel,
-  mode,
   onSelect,
   selected,
   priceBadge,
@@ -70,12 +68,7 @@ export function StationCard({
   const addr = [station.address, station.municipality, station.province].filter(Boolean).join(", ");
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`;
 
-  const visibleFuels = station.fuels.filter((f) => {
-    if (mode === "self" && !f.isSelf) return false;
-    if (mode === "served" && f.isSelf) return false;
-    return true;
-  });
-  const priced = visibleFuels.sort((a, b) => {
+  const priced = station.fuels.sort((a, b) => {
     if (a.name === highlightFuel && b.name !== highlightFuel) return -1;
     if (b.name === highlightFuel && a.name !== highlightFuel) return 1;
     return a.price - b.price;
