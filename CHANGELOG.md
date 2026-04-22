@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/shiner66/OsservatorioMIMIT-web/compare/v0.1.1...v0.1.2) (2026-04-22)
+
+
+### CI/CD
+
+* attach build binaries to release-please releases ([6b500bc](https://github.com/shiner66/OsservatorioMIMIT-web/commit/6b500bc3fca9a90f9a9bbbff97aaa84818b77384))
+
 ## [0.1.1](https://github.com/shiner66/OsservatorioMIMIT-web/compare/v0.1.0...v0.1.1) (2026-04-22)
 
 
