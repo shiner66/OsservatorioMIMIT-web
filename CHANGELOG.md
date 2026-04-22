@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/shiner66/OsservatorioMIMIT-web/compare/v0.1.2...v0.1.3) (2026-04-22)
+
+
+### Refactor
+
+* optimize backend caching, unify fuel filtering, and enhance mobile UX with pagination ([8df64d5](https://github.com/shiner66/OsservatorioMIMIT-web/commit/8df64d50cc9a58380c391351cc7cd1de37c0c4ba))
+
 ## [0.1.2](https://github.com/shiner66/OsservatorioMIMIT-web/compare/v0.1.1...v0.1.2) (2026-04-22)
 
 
