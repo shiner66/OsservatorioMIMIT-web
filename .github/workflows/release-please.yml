@@ -11,8 +11,93 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x86_64
+            asset: carburanti-linux-x86_64
+            binary: dist/carburanti
+          - os: macos-14
+            name: macos-arm64
+            asset: carburanti-macos-arm64
+            binary: dist/carburanti
+          - os: windows-latest
+            name: windows-x86_64
+            asset: carburanti-windows-x86_64.exe
+            binary: dist/carburanti.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Build frontend (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync static assets (bash)
+        if: runner.os != 'Windows'
+        run: |
+          rm -rf backend/static
+          cp -r frontend/dist backend/static
+
+      - name: Sync static assets (powershell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path backend/static) { Remove-Item backend/static -Recurse -Force }
+          Copy-Item frontend/dist backend/static -Recurse
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build binary with PyInstaller
+        run: pyinstaller carburanti.spec --clean --noconfirm
+
+      - name: Rename artifact (bash)
+        if: runner.os != 'Windows'
+        run: mv ${{ matrix.binary }} dist/${{ matrix.asset }}
+
+      - name: Rename artifact (powershell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Rename-Item ${{ matrix.binary }} ${{ matrix.asset }}
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: dist/${{ matrix.asset }}
+          fail_on_unmatched_files: true
